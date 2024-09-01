@@ -8,6 +8,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
+  Animated,
   Dimensions,
   SafeAreaView,
   StyleSheet,
@@ -36,6 +37,7 @@ interface WebViewMessage {
 
 const App = () => {
   const webViewRef = useRef<WebView | null>(null);
+  const seekBarAniRef = useRef(new Animated.Value(0));
   const [url, setUrl] = useState('');
   const [youtubeId, setYoutubeId] = useState('FiCR50TNYKY');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -144,6 +146,14 @@ const App = () => {
     }
   }, [isPlaying]);
 
+  useEffect(() => {
+    Animated.timing(seekBarAniRef.current, {
+      toValue: currentTimeInSec,
+      duration: 500,
+      useNativeDriver: false,
+    }).start();
+  }, [currentTimeInSec]);
+
   const parseTimeSeconds = (seconds: number) => {
     const cleanSeconds = Math.floor(seconds);
     const minutes = Math.floor(cleanSeconds / 60);
@@ -208,6 +218,20 @@ const App = () => {
             onMessage={handleOnMessage}
           />
         )}
+      </View>
+
+      <View style={styles.seekBarBackground}>
+        <Animated.View
+          style={[
+            styles.seekBarProgress,
+            {
+              width: seekBarAniRef.current.interpolate({
+                inputRange: [0, durationInSec],
+                outputRange: ['0%', '100%'],
+              }),
+            },
+          ]}
+        />
       </View>
 
       <Text style={styles.timeText}>
@@ -285,5 +309,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     alignSelf: 'flex-end',
     margin: 20,
+  },
+  seekBarBackground: {
+    height: 5,
+    backgroundColor: '#d4d4d4',
+  },
+  seekBarProgress: {
+    height: 5,
+    backgroundColor: 'red',
+    width: '0%',
   },
 });
