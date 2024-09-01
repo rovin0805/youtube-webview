@@ -5,28 +5,42 @@
  * @format
  */
 
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
   Dimensions,
   SafeAreaView,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import queryString from 'query-string';
-import WebView from 'react-native-webview';
+import WebView, {WebViewMessageEvent} from 'react-native-webview';
 
 const VIDEO_WIDTH = Dimensions.get('window').width;
 const VIDEO_HEIGHT = (VIDEO_WIDTH * 9) / 16;
+
+enum MessageEnum {
+  DURATION = 'duration',
+  PLAYER_STATE = 'player-state',
+  CURRENT_TIME = 'current-time',
+}
+
+interface WebViewMessage {
+  type: MessageEnum;
+  data: string | number;
+}
 
 const App = () => {
   const webViewRef = useRef<WebView | null>(null);
   const [url, setUrl] = useState('');
   const [youtubeId, setYoutubeId] = useState('FiCR50TNYKY');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [durationInSec, setDurationInSec] = useState(0);
+  const [currentTimeInSec, setCurrentTimeInSec] = useState(0);
 
   const onPressOpenLink = () => {
     const {
@@ -73,8 +87,14 @@ const App = () => {
         });
       }
 
+      function sendPostMessageToReactNative({type, data}) {
+        const message = JSON.stringify({type, data});
+        window.ReactNativeWebView.postMessage(message);
+      }
+
       // 4. The API will call this function when the video player is ready.
-      function onPlayerReady(event) {        
+      function onPlayerReady(event) {    
+        sendPostMessageToReactNative({type: '${MessageEnum.DURATION}', data: player.getDuration()});    
       }
 
       // 5. The API calls this function when the player's state changes.
@@ -82,7 +102,7 @@ const App = () => {
       //    the player should play for six seconds and then stop.
       var done = false;
       function onPlayerStateChange(event) {
-        window.ReactNativeWebView.postMessage(event.data)
+        sendPostMessageToReactNative({type: '${MessageEnum.PLAYER_STATE}', data: event.data});
       }
     </script>
   </body>
@@ -91,20 +111,64 @@ const App = () => {
     return {html};
   }, [youtubeId]);
 
+  const injectJavaScript = (script: string) => {
+    webViewRef.current?.injectJavaScript(`${script}; true;`);
+  };
+
   const handlePlay = () => {
-    webViewRef.current?.injectJavaScript(`
-      player.playVideo(); true;
-    `);
+    injectJavaScript('player.playVideo();');
   };
 
   const handlePause = () => {
-    webViewRef.current?.injectJavaScript(`
-      player.pauseVideo(); true;
-    `);
+    injectJavaScript('player.pauseVideo();');
   };
 
-  const handleOnMessage = ({nativeEvent: {data}}) => {
-    setIsPlaying(+data === 1);
+  const handleGetCurrentTime = () => {
+    const type = MessageEnum.CURRENT_TIME;
+    const data = 'player.getCurrentTime()';
+    injectJavaScript(
+      `sendPostMessageToReactNative({type: '${type}', data: ${data}});`,
+    );
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      const id = setInterval(() => {
+        if (webViewRef.current) {
+          handleGetCurrentTime();
+        }
+      }, 500);
+      return () => {
+        clearInterval(id);
+      };
+    }
+  }, [isPlaying]);
+
+  const parseTimeSeconds = (seconds: number) => {
+    const cleanSeconds = Math.floor(seconds);
+    const minutes = Math.floor(cleanSeconds / 60);
+    const remainingSeconds = cleanSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(
+      remainingSeconds,
+    ).padStart(2, '0')}`;
+  };
+
+  const handleOnMessage = ({nativeEvent: {data}}: WebViewMessageEvent) => {
+    const {type, data: eventData}: WebViewMessage = JSON.parse(data);
+    switch (type) {
+      case MessageEnum.DURATION:
+        setDurationInSec(+eventData);
+        break;
+      case MessageEnum.PLAYER_STATE:
+        setIsPlaying(+eventData === 1);
+        break;
+      case MessageEnum.CURRENT_TIME:
+        setCurrentTimeInSec(+eventData);
+        break;
+      default:
+        console.warn('Unhandled message', type);
+        break;
+    }
   };
 
   return (
@@ -145,6 +209,10 @@ const App = () => {
           />
         )}
       </View>
+
+      <Text style={styles.timeText}>
+        {parseTimeSeconds(currentTimeInSec)} / {parseTimeSeconds(durationInSec)}
+      </Text>
 
       <View style={styles.controller}>
         <TouchableOpacity
@@ -205,11 +273,17 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     backgroundColor: '#1a1a1a',
-    margin: 20,
+    marginHorizontal: 20,
   },
   controllerButton: {
     width: 50,
     height: 50,
     justifyContent: 'center',
+  },
+  timeText: {
+    color: 'white',
+    fontWeight: 'bold',
+    alignSelf: 'flex-end',
+    margin: 20,
   },
 });
