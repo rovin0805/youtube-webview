@@ -5,7 +5,7 @@
  * @format
  */
 
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {
   Alert,
   Dimensions,
@@ -23,8 +23,10 @@ const VIDEO_WIDTH = Dimensions.get('window').width;
 const VIDEO_HEIGHT = (VIDEO_WIDTH * 9) / 16;
 
 const App = () => {
+  const webViewRef = useRef<WebView | null>(null);
   const [url, setUrl] = useState('');
-  const [youtubeId, setYoutubeId] = useState('');
+  const [youtubeId, setYoutubeId] = useState('FiCR50TNYKY');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const onPressOpenLink = () => {
     const {
@@ -72,8 +74,7 @@ const App = () => {
       }
 
       // 4. The API will call this function when the video player is ready.
-      function onPlayerReady(event) {
-        event.target.playVideo();
+      function onPlayerReady(event) {        
       }
 
       // 5. The API calls this function when the player's state changes.
@@ -81,13 +82,7 @@ const App = () => {
       //    the player should play for six seconds and then stop.
       var done = false;
       function onPlayerStateChange(event) {
-        if (event.data == YT.PlayerState.PLAYING && !done) {
-          setTimeout(stopVideo, 6000);
-          done = true;
-        }
-      }
-      function stopVideo() {
-        player.stopVideo();
+        window.ReactNativeWebView.postMessage(event.data)
       }
     </script>
   </body>
@@ -95,6 +90,22 @@ const App = () => {
     `;
     return {html};
   }, [youtubeId]);
+
+  const handlePlay = () => {
+    webViewRef.current?.injectJavaScript(`
+      player.playVideo(); true;
+    `);
+  };
+
+  const handlePause = () => {
+    webViewRef.current?.injectJavaScript(`
+      player.pauseVideo(); true;
+    `);
+  };
+
+  const handleOnMessage = ({nativeEvent: {data}}) => {
+    setIsPlaying(+data === 1);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -125,12 +136,29 @@ const App = () => {
       <View style={styles.videoContainer}>
         {!!youtubeId && (
           <WebView
+            ref={webViewRef}
             source={source}
             scrollEnabled={false}
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false} // auto play for android
+            onMessage={handleOnMessage}
           />
         )}
+      </View>
+
+      <View style={styles.controller}>
+        <TouchableOpacity
+          style={styles.controllerButton}
+          activeOpacity={0.7}
+          onPress={isPlaying ? handlePause : handlePlay}
+          // disabled={!(!!youtubeId && !!webViewRef.current)}
+        >
+          <Icon
+            name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
+            size={40}
+            color="white"
+          />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -169,5 +197,19 @@ const styles = StyleSheet.create({
     width: VIDEO_WIDTH,
     height: VIDEO_HEIGHT,
     backgroundColor: '#333',
+  },
+  controller: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: '#1a1a1a',
+    margin: 20,
+  },
+  controllerButton: {
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
   },
 });
