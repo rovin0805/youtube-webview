@@ -10,6 +10,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  PanResponder,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -181,6 +182,47 @@ const App = () => {
     }
   };
 
+  const seekBarAnimation = seekBarAniRef.current.interpolate({
+    inputRange: [0, durationInSec],
+    outputRange: ['0%', '100%'],
+  });
+
+  const durationInSecRef = useRef(durationInSec);
+  durationInSecRef.current = durationInSec; // 리렌더링에 관계없이 항상 최신의 durationInSec 값을 유지
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // 사용자가 화면을 터치할 때 PanResponder가 활성화되어야 하는지 여부
+      onStartShouldSetPanResponder: () => true,
+
+      // 사용자가 화면을 터치한 상태에서 움직일 때 PanResponder가 활성화되어야 하는지 여부
+      onMoveShouldSetPanResponder: () => true,
+
+      // PanResponder가 활성화되고 제스처가 시작될 때 호출
+      onPanResponderGrant: () => {
+        // pause video
+        injectJavaScript('player.pauseVideo();');
+      },
+
+      // 사용자가 터치한 상태에서 움직일 때 호출
+      onPanResponderMove: (event, gestureState) => {
+        // update seek bar thumb position
+        const newTimeInSec =
+          (gestureState.moveX / VIDEO_WIDTH) * durationInSecRef.current;
+        seekBarAniRef.current.setValue(newTimeInSec);
+      },
+
+      // 사용자가 터치를 해제할 때 호출
+      onPanResponderRelease: (event, gestureState) => {
+        // seek video and play
+        const newTimeInSec =
+          (gestureState.moveX / VIDEO_WIDTH) * durationInSecRef.current;
+        injectJavaScript(`player.seekTo(${newTimeInSec}, true);`);
+        injectJavaScript('player.playVideo();');
+      },
+    }),
+  ).current;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.inputContainer}>
@@ -220,17 +262,12 @@ const App = () => {
         )}
       </View>
 
-      <View style={styles.seekBarBackground}>
+      <View style={styles.seekBarBackground} {...panResponder.panHandlers}>
         <Animated.View
-          style={[
-            styles.seekBarProgress,
-            {
-              width: seekBarAniRef.current.interpolate({
-                inputRange: [0, durationInSec],
-                outputRange: ['0%', '100%'],
-              }),
-            },
-          ]}
+          style={[styles.seekBarProgress, {width: seekBarAnimation}]}
+        />
+        <Animated.View
+          style={[styles.seekBarThumb, {left: seekBarAnimation}]}
         />
       </View>
 
@@ -313,10 +350,20 @@ const styles = StyleSheet.create({
   seekBarBackground: {
     height: 5,
     backgroundColor: '#d4d4d4',
+    pointerEvents: 'box-none',
   },
   seekBarProgress: {
     height: 5,
     backgroundColor: 'red',
     width: '0%',
+    pointerEvents: 'none',
+  },
+  seekBarThumb: {
+    width: 13,
+    height: 13,
+    borderRadius: 13 / 2,
+    backgroundColor: 'red',
+    position: 'absolute',
+    top: (5 - 13) / 2,
   },
 });
