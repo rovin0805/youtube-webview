@@ -44,6 +44,14 @@ const App = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [durationInSec, setDurationInSec] = useState(0);
   const [currentTimeInSec, setCurrentTimeInSec] = useState(0);
+  const [isActiveRepeat, setIsActiveRepeat] = useState(false);
+  const [repeatBlock, setRepeatBlock] = useState<{
+    startInSec: number | null;
+    endInSec: number | null;
+  }>({
+    startInSec: null,
+    endInSec: null,
+  });
 
   const onPressOpenLink = () => {
     const {
@@ -223,6 +231,45 @@ const App = () => {
     }),
   ).current;
 
+  const toggleRepeat = () => setIsActiveRepeat(prev => !prev);
+
+  const handleSetRepeatBlock = () => {
+    const {startInSec, endInSec} = repeatBlock;
+    if (startInSec === null) {
+      setRepeatBlock({
+        ...repeatBlock,
+        startInSec: currentTimeInSec,
+      });
+    } else if (endInSec === null) {
+      setRepeatBlock({
+        ...repeatBlock,
+        endInSec: currentTimeInSec,
+      });
+    } else {
+      setRepeatBlock({
+        startInSec: null,
+        endInSec: null,
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (isActiveRepeat) {
+      const {startInSec, endInSec} = repeatBlock;
+      if (startInSec !== null && endInSec !== null) {
+        if (currentTimeInSec > endInSec) {
+          injectJavaScript(`player.seekTo(${startInSec}, true);`);
+          injectJavaScript('player.playVideo();');
+        }
+      }
+    }
+  }, [
+    isActiveRepeat,
+    repeatBlock.endInSec,
+    repeatBlock.startInSec,
+    currentTimeInSec,
+  ]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.inputContainer}>
@@ -269,6 +316,26 @@ const App = () => {
         <Animated.View
           style={[styles.seekBarThumb, {left: seekBarAnimation}]}
         />
+
+        {!!repeatBlock.startInSec && (
+          <View
+            style={[
+              styles.seekBarThumb,
+              styles.repeatThumb,
+              {left: (repeatBlock.startInSec / durationInSec) * VIDEO_WIDTH},
+            ]}
+          />
+        )}
+
+        {!!repeatBlock.endInSec && (
+          <View
+            style={[
+              styles.seekBarThumb,
+              styles.repeatThumb,
+              {left: (repeatBlock.endInSec / durationInSec) * VIDEO_WIDTH},
+            ]}
+          />
+        )}
       </View>
 
       <Text style={styles.timeText}>
@@ -276,6 +343,12 @@ const App = () => {
       </Text>
 
       <View style={styles.controller}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => handleSetRepeatBlock()}>
+          <Icon name={'data-array'} size={30} color="white" />
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.controllerButton}
           activeOpacity={0.7}
@@ -286,6 +359,14 @@ const App = () => {
             name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
             size={40}
             color="white"
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity activeOpacity={0.7} onPress={() => toggleRepeat()}>
+          <Icon
+            name={'repeat'}
+            size={30}
+            color={isActiveRepeat ? '#65E2B2' : 'white'}
           />
         </TouchableOpacity>
       </View>
@@ -329,7 +410,7 @@ const styles = StyleSheet.create({
   },
   controller: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-evenly',
     alignItems: 'center',
     padding: 15,
     borderRadius: 10,
@@ -365,5 +446,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'red',
     position: 'absolute',
     top: (5 - 13) / 2,
+  },
+  repeatThumb: {
+    backgroundColor: '#65E2B2',
   },
 });
