@@ -305,6 +305,7 @@ const App = () => {
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false} // auto play for android
             onMessage={handleOnMessage}
+            webviewDebuggingEnabled
           />
         )}
       </View>
